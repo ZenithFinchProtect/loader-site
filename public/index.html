@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download</title>
+    <meta name="description" content="Download your loader">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #060a10;
+            --bg-secondary: #0c1220;
+            --bg-card: #101829;
+            --bg-input: #0a0f1a;
+            --border: #1a2744;
+            --border-hover: #2a4070;
+            --accent: #00bfff;
+            --accent-glow: rgba(0, 191, 255, 0.15);
+            --accent-bright: #00d4ff;
+            --accent-dim: #0099cc;
+            --success: #22c55e;
+            --success-dim: rgba(34, 197, 94, 0.12);
+            --error: #ef4444;
+            --error-dim: rgba(239, 68, 68, 0.12);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --radius: 10px;
+            --radius-sm: 6px;
+            --shadow: 0 4px 24px rgba(0,0,0,0.4);
+            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: -200px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 900px;
+            height: 500px;
+            background: radial-gradient(ellipse, rgba(0,191,255,0.06) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app {
+            position: relative;
+            z-index: 1;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .download-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 36px 32px;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+
+        .download-card:hover { border-color: var(--border-hover); }
+
+        .download-title {
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .download-sub {
+            font-size: 14px;
+            color: var(--text-muted);
+            text-align: center;
+            line-height: 1.6;
+            margin-bottom: 28px;
+        }
+
+        .form-group { margin-bottom: 16px; }
+
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .form-input::placeholder { color: var(--text-muted); }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+            width: 100%;
+            margin-top: 4px;
+        }
+        .btn-primary:hover { background: var(--accent-dim); transform: translateY(-1px); }
+        .btn-primary:active { transform: translateY(0); }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: none;
+        }
+
+        .btn.loading .spinner { display: inline-block; }
+        .btn.loading .btn-text { opacity: 0.7; }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .output {
+            margin-top: 20px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            display: none;
+        }
+
+        .output.show { display: block; animation: slideDown 0.25s ease; }
+
+        @keyframes slideDown {
+            from { opacity: 0; max-height: 0; }
+            to { opacity: 1; max-height: 600px; }
+        }
+
+        .output-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: rgba(255,255,255,0.02);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .output-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        .output-status {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .output-status.success { background: var(--success-dim); color: var(--success); }
+        .output-status.error { background: var(--error-dim); color: var(--error); }
+
+        .output-body {
+            padding: 14px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.7;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .output-body::-webkit-scrollbar { width: 4px; }
+        .output-body::-webkit-scrollbar-track { background: transparent; }
+        .output-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            padding: 12px 20px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 500;
+            box-shadow: var(--shadow);
+            animation: toastIn 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            max-width: 380px;
+        }
+
+        .toast.success { background: #0d2818; border: 1px solid rgba(34,197,94,0.3); color: var(--success); }
+        .toast.error { background: #2d0a0a; border: 1px solid rgba(239,68,68,0.3); color: var(--error); }
+        .toast.info { background: #0c1a2e; border: 1px solid rgba(0,191,255,0.3); color: var(--accent-bright); }
+
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(40px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        footer {
+            text-align: center;
+            padding: 24px;
+            color: var(--text-muted);
+            font-size: 12px;
+            position: relative;
+            z-index: 1;
+        }
+
+        @media (max-width: 480px) {
+            .download-card { padding: 28px 20px; }
+            .download-title { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="app">
+        <div class="download-card">
+            <h1 class="download-title">Download Loader</h1>
+            <p class="download-sub">Enter your activation key to download the loader. Re-downloads are free for valid keys.</p>
+
+            <div class="form-group">
+                <label class="form-label" for="keyInput">Activation Key</label>
+                <input type="text" class="form-input" id="keyInput" placeholder="Enter your key..." autocomplete="off"
+                       onkeydown="if(event.key==='Enter')downloadLoader()">
+            </div>
+
+            <button class="btn btn-primary" id="downloadBtn" onclick="downloadLoader()">
+                <span class="spinner"></span>
+                <span class="btn-text">Download Loader</span>
+            </button>
+
+            <div class="output" id="output">
+                <div class="output-header">
+                    <span class="output-title">Result</span>
+                    <span class="output-status" id="outputStatus"></span>
+                </div>
+                <div class="output-body" id="outputBody"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer>&copy; <span id="year"></span></footer>
+
+    <script>
+        document.getElementById('year').textContent = new Date().getFullYear();
+
+        // ── Toast notifications ──
+        function toast(msg, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const el = document.createElement('div');
+            el.className = `toast ${type}`;
+            el.textContent = msg;
+            container.appendChild(el);
+            setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 4000);
+        }
+
+        // ── API call helper ──
+        async function api(method, path, body = null, timeoutMs = 130000) {
+            const headers = { 'Content-Type': 'application/json' };
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+            try {
+                const opts = { method, headers, signal: controller.signal };
+                if (body && ['POST', 'PUT', 'DELETE'].includes(method)) {
+                    opts.body = JSON.stringify(body);
+                }
+
+                const res = await fetch(path, opts);
+                clearTimeout(timer);
+
+                let data;
+                const contentType = res.headers.get('Content-Type') || '';
+                if (contentType.includes('application/json')) {
+                    try {
+                        data = await res.json();
+                    } catch (jsonErr) {
+                        const text = await res.text();
+                        data = { status: 'error', message: `Invalid JSON response: ${text.slice(0, 200)}` };
+                    }
+                } else {
+                    const text = await res.text();
+                    data = { status: 'error', message: text.slice(0, 200) || `HTTP Error ${res.status}: ${res.statusText}` };
+                }
+
+                return { ok: res.ok && data?.status !== 'error', status: res.status, data };
+            } catch (err) {
+                clearTimeout(timer);
+                throw err;
+            }
+        }
+
+        // ── Show response in output panel ──
+        function showOutput(data, isOk) {
+            const output = document.getElementById('output');
+            const status = document.getElementById('outputStatus');
+            const body = document.getElementById('outputBody');
+
+            output.classList.add('show');
+            status.className = `output-status ${isOk ? 'success' : 'error'}`;
+            status.textContent = isOk ? 'SUCCESS' : 'ERROR';
+
+            body.textContent = (data && typeof data.message === 'string')
+                ? data.message
+                : JSON.stringify(data, null, 2);
+        }
+
+        // ── EXE download helper ──
+        function downloadExe(base64, filename) {
+            try {
+                const binary = atob(base64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+                const blob = new Blob([bytes], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename || 'loader.exe';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                toast('Failed to decode loader: ' + err.message, 'error');
+            }
+        }
+
+        // ── Download flow ──
+        async function downloadLoader() {
+            const key = document.getElementById('keyInput').value.trim();
+            if (!key) return toast('Please enter your key', 'error');
+
+            const btn = document.getElementById('downloadBtn');
+            btn.disabled = true;
+            btn.classList.add('loading');
+
+            try {
+                const r = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
+
+                const display = { ...r.data };
+                if (display.exe_base64) display.exe_base64 = `[${display.exe_base64.length} chars — downloading...]`;
+                showOutput(display, r.ok);
+
+                if (r.ok && r.data.exe_base64) {
+                    downloadExe(r.data.exe_base64, r.data.exe_filename);
+                    toast('Loader downloaded successfully', 'success');
+                } else if (!r.ok) {
+                    toast(r.data.message || 'Download failed', 'error');
+                }
+            } catch (err) {
+                toast('Error: ' + err.message, 'error');
+            }
+
+            btn.disabled = false;
+            btn.classList.remove('loading');
+        }
+    </script>
+</body>
+</html>
