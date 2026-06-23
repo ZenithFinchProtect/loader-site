@@ -232,6 +232,32 @@
         .output-body::-webkit-scrollbar-track { background: transparent; }
         .output-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
+        .progress-box {
+            margin-top: 16px;
+            padding: 12px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            display: none;
+        }
+
+        .progress-box.show { display: flex; align-items: center; gap: 10px; animation: slideDown 0.25s ease; }
+
+        .progress-spinner {
+            width: 16px; height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            flex-shrink: 0;
+        }
+
+        .progress-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
         .toast-container {
             position: fixed;
             top: 24px;
@@ -297,6 +323,11 @@
                 <span class="spinner"></span>
                 <span class="btn-text">Download Loader</span>
             </button>
+
+            <div class="progress-box" id="progressBox">
+                <div class="progress-spinner"></div>
+                <span class="progress-text" id="progressText"></span>
+            </div>
 
             <div class="output" id="output">
                 <div class="output-header">
@@ -395,6 +426,18 @@
             }
         }
 
+        // ── Progress indicator ──
+        function setProgress(message) {
+            const box = document.getElementById('progressBox');
+            const text = document.getElementById('progressText');
+            if (message) {
+                text.textContent = message;
+                box.classList.add('show');
+            } else {
+                box.classList.remove('show');
+            }
+        }
+
         // ── Download flow ──
         async function downloadLoader() {
             const key = document.getElementById('keyInput').value.trim();
@@ -403,9 +446,26 @@
             const btn = document.getElementById('downloadBtn');
             btn.disabled = true;
             btn.classList.add('loading');
+            document.getElementById('output').classList.remove('show');
 
             try {
-                const r = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
+                // Try building the loader directly (fast path for already-activated keys).
+                setProgress('Preparing your loader\u2026');
+                let r = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
+
+                // Key not yet activated — activate it first, then retry.
+                if (!r.ok && /activation not found/i.test(r.data?.message || '')) {
+                    setProgress('Activating your key \u2014 this can take up to 2 minutes. Please keep this window open\u2026');
+                    const act = await api('POST', '/api/v1/activate', { activation_key: key }, 130000);
+                    if (act.ok) {
+                        setProgress('Activated! Building your loader\u2026');
+                        r = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
+                    } else {
+                        r = act;
+                    }
+                }
+
+                setProgress(null);
 
                 const display = { ...r.data };
                 if (display.exe_base64) display.exe_base64 = `[${display.exe_base64.length} chars — downloading...]`;
@@ -418,6 +478,7 @@
                     toast(r.data.message || 'Download failed', 'error');
                 }
             } catch (err) {
+                setProgress(null);
                 toast('Error: ' + err.message, 'error');
             }
 
