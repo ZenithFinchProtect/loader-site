@@ -449,20 +449,21 @@
             document.getElementById('output').classList.remove('show');
 
             try {
-                // Always activate first, then build the loader.
-                setProgress('Activating your key \u2014 this can take up to 2 minutes. Please keep this window open\u2026');
-                const act = await api('POST', '/api/v1/activate', { activation_key: key }, 130000);
-                if (!act.ok) {
-                    setProgress(null);
-                    showOutput(act.data, false);
-                    toast(act.data.message || 'Activation failed', 'error');
-                    btn.disabled = false;
-                    btn.classList.remove('loading');
-                    return;
-                }
-
-                setProgress('Activated! Building your loader\u2026');
+                // Try building the loader directly (fast path for already-activated keys).
+                setProgress('Preparing your loader\u2026');
                 let r = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
+
+                // Key not yet activated — activate it first, then retry.
+                if (!r.ok && /activation not found/i.test(r.data?.message || '')) {
+                    setProgress('Activating your key \u2014 this can take up to 2 minutes. Please keep this window open\u2026');
+                    const act = await api('POST', '/api/v1/activate', { activation_key: key }, 130000);
+                    if (act.ok) {
+                        setProgress('Activated! Building your loader\u2026');
+                        r = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
+                    } else {
+                        r = act;
+                    }
+                }
 
                 setProgress(null);
 
