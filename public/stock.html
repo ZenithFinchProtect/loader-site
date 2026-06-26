@@ -353,8 +353,8 @@
                     var count = Number(stock[variant.key]) || 0;
                     return { inStock: count > 0, label: count > 0 ? ('In Stock · ' + count) : 'Out of Stock' };
                 }
-                // No 1:1 backend key — mirror the store's listed availability.
-                return { inStock: true, label: 'In Stock' };
+                // No 1:1 backend key — these are not separately tracked and are out of stock.
+                return { inStock: false, label: 'Out of Stock' };
             }
 
             function cardHtml(variant, stock) {
