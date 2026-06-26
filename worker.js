@@ -19,6 +19,13 @@ export default {
 
     // --- Serve static assets ---
     if (!url.pathname.startsWith('/api/')) {
+      // Stock page: served on the `stock.` subdomain root, or via /stock.
+      const onStockSubdomain = url.hostname.split('.')[0] === 'stock';
+      const wantsStock = url.pathname === '/stock' || url.pathname === '/stock/';
+      if ((onStockSubdomain && (url.pathname === '/' || url.pathname === '')) || wantsStock) {
+        const stockReq = new Request(new URL('/stock.html', url.origin), request);
+        return env.ASSETS.fetch(stockReq);
+      }
       return env.ASSETS.fetch(request);
     }
 
