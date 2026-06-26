@@ -23,7 +23,7 @@ export default {
       const onStockSubdomain = url.hostname.split('.')[0] === 'stock';
       const wantsStock = url.pathname === '/stock' || url.pathname === '/stock/';
       if ((onStockSubdomain && (url.pathname === '/' || url.pathname === '')) || wantsStock) {
-        const stockReq = new Request(new URL('/stock.html', url.origin), request);
+        const stockReq = new Request(new URL('/stock', url.origin), request);
         return env.ASSETS.fetch(stockReq);
       }
       return env.ASSETS.fetch(request);
