@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock</title>
+    <meta name="description" content="Live account stock">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #060a10;
+            --bg-secondary: #0c1220;
+            --bg-card: #101829;
+            --bg-input: #0a0f1a;
+            --border: #1a2744;
+            --border-hover: #2a4070;
+            --accent: #00bfff;
+            --accent-glow: rgba(0, 191, 255, 0.15);
+            --accent-bright: #00d4ff;
+            --accent-dim: #0099cc;
+            --success: #22c55e;
+            --success-dim: rgba(34, 197, 94, 0.12);
+            --error: #ef4444;
+            --error-dim: rgba(239, 68, 68, 0.12);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --radius: 10px;
+            --radius-sm: 6px;
+            --shadow: 0 4px 24px rgba(0,0,0,0.4);
+            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: -200px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 900px;
+            height: 500px;
+            background: radial-gradient(ellipse, rgba(0,191,255,0.06) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app {
+            position: relative;
+            z-index: 1;
+            flex: 1;
+            width: 100%;
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 48px 24px 24px;
+        }
+
+        .header { text-align: center; margin-bottom: 8px; }
+
+        .title {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        .sub {
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-top: 8px;
+        }
+
+        .meta {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin: 20px 0 32px;
+            font-size: 12px;
+            color: var(--text-muted);
+            flex-wrap: wrap;
+        }
+
+        .meta .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+        .meta .dot.in { background: var(--success); }
+        .meta .dot.out { background: var(--error); }
+
+        .refresh-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            border-radius: var(--radius-sm);
+            padding: 6px 12px;
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .refresh-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
+        .group { margin-bottom: 32px; }
+
+        .group-head {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 14px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .group-title {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+
+        .group-count {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 14px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 18px 16px;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .card:hover { border-color: var(--border-hover); }
+
+        .card-name {
+            font-size: 15px;
+            font-weight: 600;
+            line-height: 1.3;
+            letter-spacing: -0.2px;
+        }
+
+        .status { display: flex; align-items: center; gap: 8px; }
+
+        .indicator {
+            position: relative;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            flex: 0 0 auto;
+        }
+
+        .pulsating {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            opacity: 0.6;
+            animation: pulse 1.8s ease-out infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.6; }
+            100% { transform: scale(2.6); opacity: 0; }
+        }
+
+        .label {
+            font-size: 13px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        .state.error { color: var(--error); }
+
+        footer {
+            text-align: center;
+            padding: 24px;
+            color: var(--text-muted);
+            font-size: 12px;
+            position: relative;
+            z-index: 1;
+        }
+
+        @media (max-width: 480px) {
+            .app { padding: 32px 16px 16px; }
+            .title { font-size: 22px; }
+            .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="header">
+            <h1 class="title">Account Stock</h1>
+            <p class="sub">Live availability for every account we sell. Updates automatically.</p>
+        </div>
+
+        <div class="meta">
+            <span><span class="dot in"></span>In stock</span>
+            <span><span class="dot out"></span>Out of stock</span>
+            <span id="updated"></span>
+            <button class="refresh-btn" id="refreshBtn" onclick="load()">Refresh</button>
+        </div>
+
+        <!--
+          data-products: comma-separated list of product families sold on the
+          store. Only stock keys belonging to one of these families are shown,
+          so internal/unsold types never leak onto the page. Format per entry:
+          "family:Label" where `family` is the stock-key prefix.
+        -->
+        <div id="root"
+             data-api="/api/v1/stock"
+             data-refresh="60"
+             data-hide-empty="false"
+             data-products="rust:Rust, cs2:CS2, dayz:DayZ, arc:ARC, escape_from_tarkov:EFT, battlefield_6:BF6">
+            <div class="state" id="loading">Loading live stock…</div>
+        </div>
+    </div>
+
+    <footer>&copy; <span id="year"></span></footer>
+
+    <script>
+        (function () {
+            var root       = document.getElementById('root');
+            var API        = root.getAttribute('data-api') || '/api/v1/stock';
+            var REFRESH    = parseInt(root.getAttribute('data-refresh') || '60', 10);
+            var HIDE_EMPTY = root.getAttribute('data-hide-empty') === 'true';
+            var COLOR_IN   = getCssVar('--success', '#22c55e');
+            var COLOR_OUT  = getCssVar('--error', '#ef4444');
+
+            // Products sold on the store. Order here is the display order.
+            var FAMILIES = (root.getAttribute('data-products') || '')
+                .split(',')
+                .map(function (s) { return s.trim(); })
+                .filter(Boolean)
+                .map(function (entry) {
+                    var parts = entry.split(':');
+                    return { key: parts[0].trim(), label: (parts[1] || parts[0]).trim() };
+                });
+
+            document.getElementById('year').textContent = new Date().getFullYear();
+
+            function getCssVar(name, fallback) {
+                var v = getComputedStyle(document.documentElement).getPropertyValue(name);
+                return (v && v.trim()) || fallback;
+            }
+
+            function esc(s) {
+                return String(s).replace(/[&<>"']/g, function (c) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                });
+            }
+
+            // Tokens that should keep a specific casing instead of Title Case.
+            var ACRONYMS = {
+                cs2: 'CS2', eft: 'EFT', bf6: 'BF6', arc: 'ARC', dayz: 'DayZ',
+                nfa: 'NFA', elo: 'ELO', inv: 'Inv', hd: 'HD'
+            };
+
+            function prettify(text) {
+                return String(text)
+                    .replace(/_/g, ' ')
+                    .replace(/\b\d+ \d+\b/g, function (m) { return m.replace(' ', '-'); })
+                    .split(' ')
+                    .filter(Boolean)
+                    .map(function (w) {
+                        var low = w.toLowerCase();
+                        if (ACRONYMS[low]) return ACRONYMS[low];
+                        if (/^\d/.test(w)) return w.toUpperCase();
+                        return w.charAt(0).toUpperCase() + w.slice(1);
+                    })
+                    .join(' ');
+            }
+
+            // Find the family a stock key belongs to (longest-prefix match), or null.
+            function familyFor(key) {
+                var best = null;
+                FAMILIES.forEach(function (fam) {
+                    if (key === fam.key || key.indexOf(fam.key + '_') === 0) {
+                        if (!best || fam.key.length > best.key.length) best = fam;
+                    }
+                });
+                return best;
+            }
+
+            function variantName(key, fam) {
+                var rest = key === fam.key ? '' : key.slice(fam.key.length + 1);
+                return rest ? prettify(rest) : 'Standard';
+            }
+
+            function cardHtml(name, count) {
+                var inStock = count > 0;
+                var color   = inStock ? COLOR_IN : COLOR_OUT;
+                var label   = inStock ? ('In Stock · ' + count) : 'Out of Stock';
+                return ''
+                    + '<div class="card">'
+                    +   '<div class="card-name">' + esc(name) + '</div>'
+                    +   '<div class="status">'
+                    +     '<span class="indicator" style="background-color:' + color + '">'
+                    +       '<span class="pulsating" style="background-color:' + color + '"></span>'
+                    +     '</span>'
+                    +     '<span class="label" style="color:' + color + '">' + esc(label) + '</span>'
+                    +   '</div>'
+                    + '</div>';
+            }
+
+            function render(stock) {
+                // Bucket each sold stock key under its product family.
+                var buckets = {};
+                FAMILIES.forEach(function (f) { buckets[f.key] = []; });
+
+                Object.keys(stock).forEach(function (key) {
+                    var fam = familyFor(key);
+                    if (!fam) return; // not a product we sell — skip it
+                    var count = Number(stock[key]) || 0;
+                    if (HIDE_EMPTY && count <= 0) return;
+                    buckets[fam.key].push({ name: variantName(key, fam), count: count });
+                });
+
+                var html = FAMILIES.map(function (fam) {
+                    var items = buckets[fam.key];
+                    if (!items || !items.length) return '';
+                    items.sort(function (a, b) { return a.name.localeCompare(b.name); });
+                    var inCount = items.filter(function (i) { return i.count > 0; }).length;
+                    return ''
+                        + '<section class="group">'
+                        +   '<div class="group-head">'
+                        +     '<span class="group-title">' + esc(fam.label) + '</span>'
+                        +     '<span class="group-count">' + inCount + '/' + items.length + ' in stock</span>'
+                        +   '</div>'
+                        +   '<div class="grid">'
+                        +     items.map(function (i) { return cardHtml(i.name, i.count); }).join('')
+                        +   '</div>'
+                        + '</section>';
+                }).join('');
+
+                root.innerHTML = html || '<div class="state">No stock to display.</div>';
+
+                var u = document.getElementById('updated');
+                if (u) u.textContent = 'Updated ' + new Date().toLocaleTimeString();
+            }
+
+            function load() {
+                fetch(API, { headers: { 'Accept': 'application/json' } })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) { render((data && data.stock) || {}); })
+                    .catch(function () {
+                        root.innerHTML = '<div class="state error">Stock temporarily unavailable.</div>';
+                    });
+            }
+
+            window.load = load;
+            load();
+            if (REFRESH > 0) setInterval(load, REFRESH * 1000);
+        })();
+    </script>
+</body>
+</html>
