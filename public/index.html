@@ -6,37 +6,45 @@
     <title>Download</title>
     <meta name="description" content="Download your loader">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #060a10;
-            --bg-secondary: #0c1220;
-            --bg-card: #101829;
-            --bg-input: #0a0f1a;
-            --border: #1a2744;
-            --border-hover: #2a4070;
-            --accent: #00bfff;
-            --accent-glow: rgba(0, 191, 255, 0.15);
-            --accent-bright: #00d4ff;
-            --accent-dim: #0099cc;
-            --success: #22c55e;
-            --success-dim: rgba(34, 197, 94, 0.12);
-            --error: #ef4444;
-            --error-dim: rgba(239, 68, 68, 0.12);
-            --text-primary: #e2e8f0;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --radius: 10px;
-            --radius-sm: 6px;
-            --shadow: 0 4px 24px rgba(0,0,0,0.4);
+            /* Theme matched to nfaccount.com (monochrome / white accent) */
+            --bg-primary: #070707;
+            --bg-secondary: #0f0f0f;
+            --bg-card: #171717;
+            --bg-input: #121212;
+            --border: rgba(255, 255, 255, 0.10);
+            --border-hover: rgba(255, 255, 255, 0.24);
+            --accent: #ffffff;
+            --accent-glow: rgba(255, 255, 255, 0.12);
+            --accent-bright: #ffffff;
+            --accent-dim: #e5e5e5;
+            --success: #4ade80;
+            --success-dim: rgba(74, 222, 128, 0.12);
+            --error: #fb7185;
+            --error-dim: rgba(251, 113, 133, 0.12);
+            --text-primary: #fafafa;
+            --text-secondary: #b5b5b5;
+            --text-muted: #7d7d7d;
+            --radius: 20px;
+            --radius-sm: 14px;
+            --shadow: 0 24px 70px rgba(0,0,0,0.34);
             --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --font: 'Inter', Manrope, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Inter', -apple-system, sans-serif;
-            background: var(--bg-primary);
+            font-family: var(--font);
+            background:
+                radial-gradient(circle at 12% 4%, rgba(255,255,255,0.06), transparent 31rem),
+                radial-gradient(circle at 88% 18%, rgba(245,245,245,0.05), transparent 29rem),
+                radial-gradient(circle at 52% 82%, rgba(112,112,112,0.10), transparent 36rem),
+                linear-gradient(140deg, #050505 0%, #11101a 46%, #0a0910 100%);
+            background-attachment: fixed;
             color: var(--text-primary);
             min-height: 100vh;
             display: flex;
@@ -52,7 +60,7 @@
             transform: translateX(-50%);
             width: 900px;
             height: 500px;
-            background: radial-gradient(ellipse, rgba(0,191,255,0.06) 0%, transparent 70%);
+            background: radial-gradient(ellipse, rgba(255,255,255,0.05) 0%, transparent 70%);
             pointer-events: none;
             z-index: 0;
         }
@@ -81,9 +89,10 @@
         .download-card:hover { border-color: var(--border-hover); }
 
         .download-title {
-            font-size: 26px;
-            font-weight: 800;
-            letter-spacing: -0.5px;
+            font-family: var(--display);
+            font-size: 30px;
+            font-weight: 700;
+            letter-spacing: -1px;
             margin-bottom: 8px;
             text-align: center;
         }
@@ -145,7 +154,7 @@
 
         .btn-primary {
             background: var(--accent);
-            color: #fff;
+            color: #070707;
             width: 100%;
             margin-top: 4px;
         }
@@ -257,7 +266,7 @@
 
         .toast.success { background: #0d2818; border: 1px solid rgba(34,197,94,0.3); color: var(--success); }
         .toast.error { background: #2d0a0a; border: 1px solid rgba(239,68,68,0.3); color: var(--error); }
-        .toast.info { background: #0c1a2e; border: 1px solid rgba(0,191,255,0.3); color: var(--accent-bright); }
+        .toast.info { background: #1a1a1a; border: 1px solid rgba(255,255,255,0.2); color: var(--text-primary); }
 
         @keyframes toastIn {
             from { opacity: 0; transform: translateX(40px); }
