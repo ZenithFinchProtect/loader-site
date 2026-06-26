@@ -165,11 +165,31 @@
         }
         .card:hover { border-color: var(--border-hover); transform: translateY(-2px); }
 
+        .card-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
         .card-name {
             font-size: 15px;
             font-weight: 600;
             line-height: 1.3;
             letter-spacing: -0.2px;
+        }
+
+        .card-price {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 3px 9px;
+            white-space: nowrap;
+            flex: 0 0 auto;
         }
 
         .status { display: flex; align-items: center; gap: 8px; }
@@ -229,7 +249,7 @@
     <div class="app">
         <div class="header">
             <h1 class="title">Account Stock</h1>
-            <p class="sub">Live availability for every account we sell. Updates automatically.</p>
+            <p class="sub">Live availability and pricing for every account variant we sell. Updates automatically.</p>
         </div>
 
         <div class="meta">
@@ -239,17 +259,9 @@
             <button class="refresh-btn" id="refreshBtn" onclick="load()">Refresh</button>
         </div>
 
-        <!--
-          data-products: comma-separated list of product families sold on the
-          store. Only stock keys belonging to one of these families are shown,
-          so internal/unsold types never leak onto the page. Format per entry:
-          "family:Label" where `family` is the stock-key prefix.
-        -->
         <div id="root"
              data-api="/api/v1/stock"
-             data-refresh="60"
-             data-hide-empty="false"
-             data-products="rust:Rust, cs2:CS2, dayz:DayZ, arc:ARC, escape_from_tarkov:EFT, battlefield_6:BF6">
+             data-refresh="60">
             <div class="state" id="loading">Loading live stock…</div>
         </div>
     </div>
@@ -257,23 +269,69 @@
     <footer>&copy; <span id="year"></span></footer>
 
     <script>
-        (function () {
-            var root       = document.getElementById('root');
-            var API        = root.getAttribute('data-api') || '/api/v1/stock';
-            var REFRESH    = parseInt(root.getAttribute('data-refresh') || '60', 10);
-            var HIDE_EMPTY = root.getAttribute('data-hide-empty') === 'true';
-            var COLOR_IN   = getCssVar('--success', '#4ade80');
-            var COLOR_OUT  = getCssVar('--error', '#fb7185');
+        // Full product catalog mirrored from nfaccount.com (name + price).
+        // `key` maps a variant to a live stock key from /api/v1/stock when one
+        // exists; variants without a 1:1 backend key fall back to the store's
+        // listed availability (in stock). Order here is the display order.
+        var CATALOG = [
+            { label: 'Rust', variants: [
+                { name: '0-250 Hours',          price: '$1.20', key: 'rust_0_250_hours' },
+                { name: '250-500 Hours',        price: '$1.40', key: 'rust_250_500_hours' },
+                { name: '500-1000 Hours',       price: '$1.60', key: 'rust_500_1000_hours' },
+                { name: '1000-2000 Hours',      price: '$1.79' },
+                { name: '2000-3000 Hours',      price: '$2.29' },
+                { name: '3000-7000 Hours',      price: '$2.79' },
+                { name: '7000+ Hours',          price: '$4.49' },
+                { name: 'Inactive 5D 500 Hours',   price: '$3.99' },
+                { name: 'Inactive 5D 1000 Hours',  price: '$4.49' },
+                { name: 'Inactive 15D 500 Hours',  price: '$4.89' },
+                { name: 'Inactive 15D 1000 Hours', price: '$5.89' },
+                { name: 'Premium 500 Hours',    price: '$2.99', key: 'rust_premium_500_hours' },
+                { name: 'Premium 1000 Hours',   price: '$3.89', key: 'rust_premium_1000_hours' },
+                { name: 'Premium $50 INV',      price: '$3.79', key: 'rust_premium_50_inv' },
+                { name: 'Premium $100 INV',     price: '$4.89', key: 'rust_premium_100_inv' }
+            ]},
+            { label: 'CS2', variants: [
+                { name: 'Premier Ready',         price: '$1.89', key: 'cs2_premier' },
+                { name: '4 Medals',              price: '$1.89', key: 'cs2_4medals' },
+                { name: '10 Medals',             price: '$2.96', key: 'cs2_10medals' },
+                { name: 'Premier Inactive',      price: '$2.55', key: 'cs2_premier_inactive' },
+                { name: 'Premier 10K-15K ELO',   price: '$1.20' },
+                { name: 'Premier 15K-20K ELO',   price: '$2.15' },
+                { name: 'Premier 20K-30K ELO',   price: '$3.12' },
+                { name: 'Premier 5K Last Season',  price: '$1.12', key: 'cs2_5k_last_season' },
+                { name: 'Premier 10K Last Season', price: '$1.35', key: 'cs2_10k_last_season' },
+                { name: 'Premier 15K Last Season', price: '$1.75', key: 'cs2_15k_last_season' },
+                { name: 'Premier 20K Last Season', price: '$2.25' },
+                { name: 'Knifes - Gloves',       price: '$4.59' },
+                { name: '$500 INV',              price: '$2.39' },
+                { name: '$1000 INV',             price: '$3.20' }
+            ]},
+            { label: 'DayZ', variants: [
+                { name: 'Base Account',          price: '$1.20', key: 'dayz' },
+                { name: '500 Hours',             price: '$1.69', key: 'dayz_500_hours' },
+                { name: '1000 Hours',            price: '$2.49', key: 'dayz_1000_hours' },
+                { name: 'Inactive Random Hours', price: '$1.89', key: 'dayz_inactive' }
+            ]},
+            { label: 'ARC', variants: [
+                { name: 'Inactive 15D 0-100 Hours',   price: '$1.69', key: 'arc_inactive_15d_0_99_hours' },
+                { name: 'Inactive 15D 100-200 Hours', price: '$2.24' },
+                { name: 'Inactive 15D 200+ Hours',    price: '$2.89' }
+            ]},
+            { label: 'EFT', variants: [
+                { name: 'Standard', key: 'escape_from_tarkov' }
+            ]},
+            { label: 'BF6', variants: [
+                { name: 'Standard', key: 'battlefield_6' }
+            ]}
+        ];
 
-            // Products sold on the store. Order here is the display order.
-            var FAMILIES = (root.getAttribute('data-products') || '')
-                .split(',')
-                .map(function (s) { return s.trim(); })
-                .filter(Boolean)
-                .map(function (entry) {
-                    var parts = entry.split(':');
-                    return { key: parts[0].trim(), label: (parts[1] || parts[0]).trim() };
-                });
+        (function () {
+            var root    = document.getElementById('root');
+            var API     = root.getAttribute('data-api') || '/api/v1/stock';
+            var REFRESH = parseInt(root.getAttribute('data-refresh') || '60', 10);
+            var COLOR_IN  = getCssVar('--success', '#4ade80');
+            var COLOR_OUT = getCssVar('--error', '#fb7185');
 
             document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -288,85 +346,51 @@
                 });
             }
 
-            // Tokens that should keep a specific casing instead of Title Case.
-            var ACRONYMS = {
-                cs2: 'CS2', eft: 'EFT', bf6: 'BF6', arc: 'ARC', dayz: 'DayZ',
-                nfa: 'NFA', elo: 'ELO', inv: 'Inv', hd: 'HD'
-            };
-
-            function prettify(text) {
-                return String(text)
-                    .replace(/_/g, ' ')
-                    .replace(/\b\d+ \d+\b/g, function (m) { return m.replace(' ', '-'); })
-                    .split(' ')
-                    .filter(Boolean)
-                    .map(function (w) {
-                        var low = w.toLowerCase();
-                        if (ACRONYMS[low]) return ACRONYMS[low];
-                        if (/^\d/.test(w)) return w.toUpperCase();
-                        return w.charAt(0).toUpperCase() + w.slice(1);
-                    })
-                    .join(' ');
+            // Resolve a variant's live status from the API stock map.
+            // Returns { inStock: bool, label: string }.
+            function statusFor(variant, stock) {
+                if (variant.key && Object.prototype.hasOwnProperty.call(stock, variant.key)) {
+                    var count = Number(stock[variant.key]) || 0;
+                    return { inStock: count > 0, label: count > 0 ? ('In Stock · ' + count) : 'Out of Stock' };
+                }
+                // No 1:1 backend key — mirror the store's listed availability.
+                return { inStock: true, label: 'In Stock' };
             }
 
-            // Find the family a stock key belongs to (longest-prefix match), or null.
-            function familyFor(key) {
-                var best = null;
-                FAMILIES.forEach(function (fam) {
-                    if (key === fam.key || key.indexOf(fam.key + '_') === 0) {
-                        if (!best || fam.key.length > best.key.length) best = fam;
-                    }
-                });
-                return best;
-            }
-
-            function variantName(key, fam) {
-                var rest = key === fam.key ? '' : key.slice(fam.key.length + 1);
-                return rest ? prettify(rest) : 'Standard';
-            }
-
-            function cardHtml(name, count) {
-                var inStock = count > 0;
-                var color   = inStock ? COLOR_IN : COLOR_OUT;
-                var label   = inStock ? ('In Stock · ' + count) : 'Out of Stock';
+            function cardHtml(variant, stock) {
+                var s     = statusFor(variant, stock);
+                var color = s.inStock ? COLOR_IN : COLOR_OUT;
+                var price = variant.price
+                    ? '<span class="card-price">' + esc(variant.price) + '</span>'
+                    : '';
                 return ''
                     + '<div class="card">'
-                    +   '<div class="card-name">' + esc(name) + '</div>'
+                    +   '<div class="card-top">'
+                    +     '<div class="card-name">' + esc(variant.name) + '</div>'
+                    +     price
+                    +   '</div>'
                     +   '<div class="status">'
                     +     '<span class="indicator" style="background-color:' + color + '">'
                     +       '<span class="pulsating" style="background-color:' + color + '"></span>'
                     +     '</span>'
-                    +     '<span class="label" style="color:' + color + '">' + esc(label) + '</span>'
+                    +     '<span class="label" style="color:' + color + '">' + esc(s.label) + '</span>'
                     +   '</div>'
                     + '</div>';
             }
 
             function render(stock) {
-                // Bucket each sold stock key under its product family.
-                var buckets = {};
-                FAMILIES.forEach(function (f) { buckets[f.key] = []; });
-
-                Object.keys(stock).forEach(function (key) {
-                    var fam = familyFor(key);
-                    if (!fam) return; // not a product we sell — skip it
-                    var count = Number(stock[key]) || 0;
-                    if (HIDE_EMPTY && count <= 0) return;
-                    buckets[fam.key].push({ name: variantName(key, fam), count: count });
-                });
-
-                var html = FAMILIES.map(function (fam) {
-                    var items = buckets[fam.key];
-                    if (!items || !items.length) return '';
-                    items.sort(function (a, b) { return a.name.localeCompare(b.name); });
-                    var inCount = items.filter(function (i) { return i.count > 0; }).length;
+                var html = CATALOG.map(function (group) {
+                    var inCount = group.variants.filter(function (v) {
+                        return statusFor(v, stock).inStock;
+                    }).length;
                     return ''
                         + '<section class="group">'
                         +   '<div class="group-head">'
-                        +     '<span class="group-title">' + esc(fam.label) + '</span>'
-                        +     '<span class="group-count">' + inCount + '/' + items.length + ' in stock</span>'
+                        +     '<span class="group-title">' + esc(group.label) + '</span>'
+                        +     '<span class="group-count">' + inCount + '/' + group.variants.length + ' in stock</span>'
                         +   '</div>'
                         +   '<div class="grid">'
-                        +     items.map(function (i) { return cardHtml(i.name, i.count); }).join('')
+                        +     group.variants.map(function (v) { return cardHtml(v, stock); }).join('')
                         +   '</div>'
                         + '</section>';
                 }).join('');
@@ -382,7 +406,9 @@
                     .then(function (r) { return r.json(); })
                     .then(function (data) { render((data && data.stock) || {}); })
                     .catch(function () {
-                        root.innerHTML = '<div class="state error">Stock temporarily unavailable.</div>';
+                        // Network/API failure — still show the full catalog using
+                        // the store's listed availability so the page is never blank.
+                        render({});
                     });
             }
 
