@@ -161,6 +161,14 @@
         .btn-primary:hover { background: var(--accent-dim); transform: translateY(-1px); }
         .btn-primary:active { transform: translateY(0); }
 
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            margin-top: 8px;
+        }
+        .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -305,6 +313,11 @@
             <button class="btn btn-primary" id="downloadBtn" onclick="downloadLoader()">
                 <span class="spinner"></span>
                 <span class="btn-text">Download Loader</span>
+            </button>
+
+            <button class="btn btn-secondary" id="replaceBtn" onclick="requestReplacement()">
+                <span class="spinner"></span>
+                <span class="btn-text">NFA invalid? Get a replacement</span>
             </button>
 
             <div class="output" id="output">
@@ -455,6 +468,50 @@
                     toast('Loader downloaded successfully', 'success');
                 } else if (!r.ok) {
                     toast(outOfStock ? RESTOCK_MESSAGE : (r.data.message || 'Download failed'), 'error');
+                }
+            } catch (err) {
+                toast('Error: ' + err.message, 'error');
+            }
+
+            btn.disabled = false;
+            btn.classList.remove('loading');
+        }
+
+        // ── Warranty replacement flow ──
+        // Asks the API to check the activated account; within the warranty window
+        // an invalid account is auto-replaced and a fresh loader is rebuilt for
+        // the same key.
+        async function requestReplacement() {
+            const key = document.getElementById('keyInput').value.trim();
+            if (!key) return toast('Please enter your key', 'error');
+
+            const btn = document.getElementById('replaceBtn');
+            btn.disabled = true;
+            btn.classList.add('loading');
+
+            try {
+                const r = await api('POST', '/api/v1/check_account', { activation_key: key }, 130000);
+                const result = (r.data && r.data.result) || '';
+
+                if (r.ok && result === 'replaced') {
+                    toast('Account replaced — rebuilding your loader…', 'success');
+                    const exe = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
+                    const display = { ...exe.data };
+                    if (display.exe_base64) display.exe_base64 = `[${display.exe_base64.length} chars — downloading...]`;
+                    showOutput(display, exe.ok);
+                    if (exe.ok && exe.data.exe_base64) {
+                        downloadExe(exe.data.exe_base64, exe.data.exe_filename);
+                        toast('Replacement loader downloaded', 'success');
+                    } else if (!exe.ok) {
+                        toast(exe.data.message || 'Replacement issued but loader rebuild failed', 'error');
+                    }
+                } else if (r.ok && result === 'valid') {
+                    showOutput(r.data, true);
+                    toast('Your account is still valid — no replacement needed', 'info');
+                } else {
+                    // invalid / out of warranty / no visible activity, etc.
+                    showOutput(r.data, false);
+                    toast(r.data.message || 'No replacement available for this key', 'error');
                 }
             } catch (err) {
                 toast('Error: ' + err.message, 'error');
