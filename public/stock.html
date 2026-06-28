@@ -379,7 +379,10 @@
             function statusFor(variant, stock) {
                 var count = variant.key ? lookupStock(stock, variant.key) : null;
                 if (count === null) count = 0;
-                return { inStock: count > 0, label: count > 0 ? ('In Stock · ' + count) : 'Out of Stock' };
+                // Cap the displayed number at 5: anything 5+ shows "5", and the
+                // real count is only revealed once it drops below 5.
+                var shown = count > 5 ? 5 : count;
+                return { inStock: count > 0, label: count > 0 ? ('In Stock · ' + shown) : 'Out of Stock' };
             }
 
             function cardHtml(variant, stock) {
