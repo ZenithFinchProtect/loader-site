@@ -161,6 +161,14 @@
         .btn-primary:hover { background: var(--accent-dim); transform: translateY(-1px); }
         .btn-primary:active { transform: translateY(0); }
 
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            margin-top: 8px;
+        }
+        .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -307,6 +315,11 @@
                 <span class="btn-text">Download Loader</span>
             </button>
 
+            <button class="btn btn-secondary" id="replaceBtn" onclick="requestReplacement()">
+                <span class="spinner"></span>
+                <span class="btn-text">NFA invalid? Get a replacement</span>
+            </button>
+
             <div class="output" id="output">
                 <div class="output-header">
                     <span class="output-title">Result</span>
@@ -410,6 +423,15 @@
             return /not\s+activated|activation\s+not\s+found|no\s+activation|not\s+found/.test(msg);
         }
 
+        // ── Shown when activation fails because the product is out of stock. ──
+        var RESTOCK_MESSAGE = 'SELECTED NFA OUT OF STOCK — USE SAME KEY WHEN AVAILABLE';
+
+        // ── Does an error after an activation attempt mean there's no stock? ──
+        function isOutOfStock(data) {
+            const msg = (data && typeof data.message === 'string') ? data.message.toLowerCase() : '';
+            return /out\s*of\s*stock|no\s+stock|sold\s*out|restock|activation\s+not\s+found|not\s+activated|not\s+found/.test(msg);
+        }
+
         // ── Download flow ──
         // 1. Try create_exe — the free re-download path for already-activated keys.
         // 2. If the key isn't activated yet, activate it first (this can take a
@@ -425,12 +447,19 @@
             try {
                 let r = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
 
+                let attemptedActivation = false;
                 if (!r.ok && needsActivation(r.data)) {
+                    attemptedActivation = true;
                     toast('Key not activated yet — activating now, this can take a couple of minutes…', 'info');
                     r = await api('POST', '/api/v1/activate', { activation_key: key }, 300000);
                 }
 
+                // An activation attempt that still fails to find an activation
+                // means the product is out of stock — ask the user to wait.
+                const outOfStock = attemptedActivation && !r.ok && isOutOfStock(r.data);
+
                 const display = { ...r.data };
+                if (outOfStock) display.message = RESTOCK_MESSAGE;
                 if (display.exe_base64) display.exe_base64 = `[${display.exe_base64.length} chars — downloading...]`;
                 showOutput(display, r.ok);
 
@@ -438,7 +467,51 @@
                     downloadExe(r.data.exe_base64, r.data.exe_filename);
                     toast('Loader downloaded successfully', 'success');
                 } else if (!r.ok) {
-                    toast(r.data.message || 'Download failed', 'error');
+                    toast(outOfStock ? RESTOCK_MESSAGE : (r.data.message || 'Download failed'), 'error');
+                }
+            } catch (err) {
+                toast('Error: ' + err.message, 'error');
+            }
+
+            btn.disabled = false;
+            btn.classList.remove('loading');
+        }
+
+        // ── Warranty replacement flow ──
+        // Asks the API to check the activated account; within the warranty window
+        // an invalid account is auto-replaced and a fresh loader is rebuilt for
+        // the same key.
+        async function requestReplacement() {
+            const key = document.getElementById('keyInput').value.trim();
+            if (!key) return toast('Please enter your key', 'error');
+
+            const btn = document.getElementById('replaceBtn');
+            btn.disabled = true;
+            btn.classList.add('loading');
+
+            try {
+                const r = await api('POST', '/api/v1/check_account', { activation_key: key }, 130000);
+                const result = (r.data && r.data.result) || '';
+
+                if (r.ok && result === 'replaced') {
+                    toast('Account replaced — rebuilding your loader…', 'success');
+                    const exe = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
+                    const display = { ...exe.data };
+                    if (display.exe_base64) display.exe_base64 = `[${display.exe_base64.length} chars — downloading...]`;
+                    showOutput(display, exe.ok);
+                    if (exe.ok && exe.data.exe_base64) {
+                        downloadExe(exe.data.exe_base64, exe.data.exe_filename);
+                        toast('Replacement loader downloaded', 'success');
+                    } else if (!exe.ok) {
+                        toast(exe.data.message || 'Replacement issued but loader rebuild failed', 'error');
+                    }
+                } else if (r.ok && result === 'valid') {
+                    showOutput(r.data, true);
+                    toast('Your account is still valid — no replacement needed', 'info');
+                } else {
+                    // invalid / out of warranty / no visible activity, etc.
+                    showOutput(r.data, false);
+                    toast(r.data.message || 'No replacement available for this key', 'error');
                 }
             } catch (err) {
                 toast('Error: ' + err.message, 'error');
