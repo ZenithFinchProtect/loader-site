@@ -278,7 +278,7 @@
                 { name: '0-250 Hours',          price: '$1.20', key: 'rust_0_250_hours' },
                 { name: '250-500 Hours',        price: '$1.40', key: 'rust_250_500_hours' },
                 { name: '500-1000 Hours',       price: '$1.60', key: 'rust_500_1000_hours' },
-                { name: '1000-2000 Hours',      price: '$1.79' },
+                { name: '1000-2000 Hours',      price: '$1.79', key: 'rust_1000_2000_hours' },
                 { name: '2000-3000 Hours',      price: '$2.29' },
                 { name: '3000-7000 Hours',      price: '$2.79' },
                 { name: '7000+ Hours',          price: '$4.49' },
@@ -346,15 +346,30 @@
                 });
             }
 
+            // Look up a key's live count, tolerating case/whitespace differences
+            // in the API's key names. Returns null when the API doesn't track the
+            // key at all (so callers can fall back instead of showing 0).
+            function lookupStock(stock, key) {
+                if (Object.prototype.hasOwnProperty.call(stock, key)) return Number(stock[key]) || 0;
+                var wanted = String(key).trim().toLowerCase();
+                for (var k in stock) {
+                    if (Object.prototype.hasOwnProperty.call(stock, k) && k.trim().toLowerCase() === wanted) {
+                        return Number(stock[k]) || 0;
+                    }
+                }
+                return null;
+            }
+
             // Resolve a variant's live status from the API stock map.
             // Returns { inStock: bool, label: string }.
             function statusFor(variant, stock) {
-                if (variant.key && Object.prototype.hasOwnProperty.call(stock, variant.key)) {
-                    var count = Number(stock[variant.key]) || 0;
+                var count = variant.key ? lookupStock(stock, variant.key) : null;
+                if (count !== null) {
                     return { inStock: count > 0, label: count > 0 ? ('In Stock · ' + count) : 'Out of Stock' };
                 }
-                // No 1:1 backend key — these are not separately tracked and are out of stock.
-                return { inStock: false, label: 'Out of Stock' };
+                // No live key (or a key the API doesn't track separately) — fall back
+                // to the store's listed availability, which is in stock.
+                return { inStock: true, label: 'In Stock' };
             }
 
             function cardHtml(variant, stock) {
