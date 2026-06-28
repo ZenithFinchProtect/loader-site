@@ -294,7 +294,7 @@
     <div class="app">
         <div class="download-card">
             <h1 class="download-title">Download Loader</h1>
-            <p class="download-sub">Enter your activation key to download the loader. Re-downloads are free for valid keys.</p>
+            <p class="download-sub">Enter your activation key to download the loader. New keys are activated automatically — re-downloads are free for valid keys.</p>
 
             <div class="form-group">
                 <label class="form-label" for="keyInput">Activation Key</label>
@@ -404,7 +404,16 @@
             }
         }
 
+        // ── Does an error message mean the key isn't activated yet? ──
+        function needsActivation(data) {
+            const msg = (data && typeof data.message === 'string') ? data.message.toLowerCase() : '';
+            return /not\s+activated|activation\s+not\s+found|no\s+activation|not\s+found/.test(msg);
+        }
+
         // ── Download flow ──
+        // 1. Try create_exe — the free re-download path for already-activated keys.
+        // 2. If the key isn't activated yet, activate it first (this can take a
+        //    couple of minutes), then download the exe it returns.
         async function downloadLoader() {
             const key = document.getElementById('keyInput').value.trim();
             if (!key) return toast('Please enter your key', 'error');
@@ -414,7 +423,12 @@
             btn.classList.add('loading');
 
             try {
-                const r = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
+                let r = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
+
+                if (!r.ok && needsActivation(r.data)) {
+                    toast('Key not activated yet — activating now, this can take a couple of minutes…', 'info');
+                    r = await api('POST', '/api/v1/activate', { activation_key: key }, 300000);
+                }
 
                 const display = { ...r.data };
                 if (display.exe_base64) display.exe_base64 = `[${display.exe_base64.length} chars — downloading...]`;
