@@ -269,60 +269,73 @@
     <footer>&copy; <span id="year"></span></footer>
 
     <script>
-        // Full product catalog mirrored from nfaccount.com (name + price).
-        // `key` maps a variant to a live stock key from /api/v1/stock when one
-        // exists; variants without a 1:1 backend key fall back to the store's
-        // listed availability (in stock). Order here is the display order.
+        // Full product catalog (name + order + grouping) as specified by the
+        // store owner. `key` maps each row to a live stock key from
+        // /api/v1/stock. Rows whose key the API doesn't currently return show a
+        // count of 0 (Out of Stock) and will light up automatically if/when the
+        // backend starts tracking that key. Order here is the display order.
         var CATALOG = [
-            { label: 'Rust', variants: [
-                { name: '0-250 Hours',          price: '$1.20', key: 'rust_0_250_hours' },
-                { name: '250-500 Hours',        price: '$1.40', key: 'rust_250_500_hours' },
-                { name: '500-1000 Hours',       price: '$1.60', key: 'rust_500_1000_hours' },
-                { name: '1000-2000 Hours',      price: '$1.79', key: 'rust_1000_2000_hours' },
-                { name: '2000-3000 Hours',      price: '$2.29' },
-                { name: '3000-7000 Hours',      price: '$2.79' },
-                { name: '7000+ Hours',          price: '$4.49' },
-                { name: 'Inactive 5D 500 Hours',   price: '$3.99' },
-                { name: 'Inactive 5D 1000 Hours',  price: '$4.49' },
-                { name: 'Inactive 15D 500 Hours',  price: '$4.89' },
-                { name: 'Inactive 15D 1000 Hours', price: '$5.89' },
-                { name: 'Premium 500 Hours',    price: '$2.99', key: 'rust_premium_500_hours' },
-                { name: 'Premium 1000 Hours',   price: '$3.89', key: 'rust_premium_1000_hours' },
-                { name: 'Premium $50 INV',      price: '$3.79', key: 'rust_premium_50_inv' },
-                { name: 'Premium $100 INV',     price: '$4.89', key: 'rust_premium_100_inv' }
-            ]},
             { label: 'CS2', variants: [
-                { name: 'Premier Ready',         price: '$1.89', key: 'cs2_premier' },
-                { name: '4 Medals',              price: '$1.89', key: 'cs2_4medals' },
-                { name: '10 Medals',             price: '$2.96', key: 'cs2_10medals' },
-                { name: 'Premier Inactive',      price: '$2.55', key: 'cs2_premier_inactive' },
-                { name: 'Premier 10K-15K ELO',   price: '$1.20' },
-                { name: 'Premier 15K-20K ELO',   price: '$2.15', key: 'cs2_15_20k_elo' },
-                { name: 'Premier 20K-30K ELO',   price: '$3.12' },
-                { name: 'Premier 5K Last Season',  price: '$1.12', key: 'cs2_5k_last_season' },
-                { name: 'Premier 10K Last Season', price: '$1.35', key: 'cs2_10k_last_season' },
-                { name: 'Premier 15K Last Season', price: '$1.75', key: 'cs2_15k_last_season' },
-                { name: 'Premier 20K Last Season', price: '$2.25' },
-                { name: 'Knifes - Gloves',       price: '$4.59' },
-                { name: '$500 INV',              price: '$2.39' },
-                { name: '$1000 INV',             price: '$3.20' }
+                { name: 'Prime',                    key: 'cs2_prime' },
+                { name: 'Prime · 15+d offline',     key: 'cs2_prime_inactive' },
+                { name: 'Premier',                  price: '$1.89', key: 'cs2_premier' },
+                { name: 'Premier · 15+d offline',   price: '$2.55', key: 'cs2_premier_inactive' },
+                { name: '4+ medals',                price: '$1.89', key: 'cs2_4medals' },
+                { name: '4+ medals · 15+d offline', key: 'cs2_4medals_inactive' },
+                { name: '10+ medals',               price: '$2.96', key: 'cs2_10medals' },
+                { name: '10+ medals · 15+d offline', key: 'cs2_10medals_inactive' },
+                { name: '10–15k ELO',               price: '$1.20', key: 'cs2_10_15k_elo' },
+                { name: '15–20k ELO',               price: '$2.15', key: 'cs2_15_20k_elo' },
+                { name: '20–30k ELO',               price: '$3.12', key: 'cs2_20_30k_elo' },
+                { name: '5k+ ELO',                  price: '$1.12', key: 'cs2_5k_last_season' },
+                { name: '10k+ ELO',                 price: '$1.35', key: 'cs2_10k_last_season' },
+                { name: '15k+ ELO',                 price: '$1.75', key: 'cs2_15k_last_season' },
+                { name: '20k+ ELO',                 price: '$2.25', key: 'cs2_20k_last_season' },
+                { name: 'Knifes / Gloves',          price: '$4.59', key: 'cs2_knifes_gloves' },
+                { name: 'Inventory $500+',          price: '$2.39', key: 'cs2_500_inv' },
+                { name: 'Inventory $1000+',         price: '$3.20', key: 'cs2_1000_inv' },
+                { name: '5+d offline',              key: 'rust_inactive_5d' },
+                { name: '5+d offline · 500+ h',     key: 'rust_inactive_5d_500_hours' },
+                { name: '5+d offline · 1000+ h',    key: 'rust_inactive_5d_1000_hours' },
+                { name: '15+d offline',             key: 'rust_inactive_15d' },
+                { name: '15+d offline · 500+ h',    key: 'rust_inactive_15d_500_hours' },
+                { name: '15+d offline · 1000+ h',   key: 'rust_inactive_15d_1000_hours' }
+            ]},
+            { label: 'Rust', variants: [
+                { name: 'Premium',                  key: 'rust_premium' },
+                { name: 'Premium · 5+d offline',    key: 'rust_premium_inactive_5d' },
+                { name: 'Premium · 15+d offline',   key: 'rust_premium_inactive_15d' },
+                { name: 'Premium · 500+ h',         price: '$2.99', key: 'rust_premium_500_hours' },
+                { name: 'Premium · 1000+ h',        price: '$3.89', key: 'rust_premium_1000_hours' },
+                { name: 'Premium · inventory $50+', price: '$3.79', key: 'rust_premium_50_inv' },
+                { name: 'Premium · inventory $100+', price: '$4.89', key: 'rust_premium_100_inv' },
+                { name: '0-250 h',                  price: '$1.20', key: 'rust_0_250_hours' },
+                { name: '250–500 h',                price: '$1.40', key: 'rust_250_500_hours' },
+                { name: '500–1000 h',               price: '$1.60', key: 'rust_500_1000_hours' },
+                { name: '1000–2000 h',              price: '$1.79', key: 'rust_1000_2000_hours' },
+                { name: '2000–3000 h',              price: '$2.29', key: 'rust_2000_3000_hours' },
+                { name: '3000–7000 h',              price: '$2.79', key: 'rust_3000_7000_hours' },
+                { name: '7000+ h',                  price: '$4.49', key: 'rust_7000_plus_hours' }
+            ]},
+            { label: 'Arc Raiders', variants: [
+                { name: '0–99 h',                   key: 'arc_0_99_hours' },
+                { name: '100–200 h',                key: 'arc_100_200_hours' },
+                { name: '200+ h',                   key: 'arc_200_plus_hours' },
+                { name: '15+d offline · 0–99 h',    price: '$1.69', key: 'arc_inactive_15d_0_99_hours' },
+                { name: '15+d offline · 100–200 h', price: '$2.24', key: 'arc_inactive_15d_100_200_hours' },
+                { name: '15+d offline · 200+ h',    price: '$2.89', key: 'arc_inactive_15d_200_plus_hours' }
+            ]},
+            { label: 'Battlefield 6', variants: [
+                { name: 'Random', key: 'battlefield_6' }
             ]},
             { label: 'DayZ', variants: [
-                { name: 'Base Account',          price: '$1.20', key: 'dayz' },
-                { name: '500 Hours',             price: '$1.69', key: 'dayz_500_hours' },
-                { name: '1000 Hours',            price: '$2.49', key: 'dayz_1000_hours' },
-                { name: 'Inactive Random Hours', price: '$1.89', key: 'dayz_inactive' }
+                { name: 'Random',          price: '$1.20', key: 'dayz' },
+                { name: '500+ h',          price: '$1.69', key: 'dayz_500_hours' },
+                { name: '1000+ h',         price: '$2.49', key: 'dayz_1000_hours' },
+                { name: '15+d offline',    price: '$1.89', key: 'dayz_inactive' }
             ]},
-            { label: 'ARC', variants: [
-                { name: 'Inactive 15D 0-100 Hours',   price: '$1.69', key: 'arc_inactive_15d_0_99_hours' },
-                { name: 'Inactive 15D 100-200 Hours', price: '$2.24' },
-                { name: 'Inactive 15D 200+ Hours',    price: '$2.89' }
-            ]},
-            { label: 'EFT', variants: [
-                { name: 'Standard', key: 'escape_from_tarkov' }
-            ]},
-            { label: 'BF6', variants: [
-                { name: 'Standard', key: 'battlefield_6' }
+            { label: 'Escape from Tarkov', variants: [
+                { name: 'Random', key: 'escape_from_tarkov' }
             ]}
         ];
 
@@ -361,15 +374,12 @@
             }
 
             // Resolve a variant's live status from the API stock map.
-            // Returns { inStock: bool, label: string }.
+            // Returns { inStock: bool, label: string }. A key the API doesn't
+            // return is treated as 0 (Out of Stock).
             function statusFor(variant, stock) {
                 var count = variant.key ? lookupStock(stock, variant.key) : null;
-                if (count !== null) {
-                    return { inStock: count > 0, label: count > 0 ? ('In Stock · ' + count) : 'Out of Stock' };
-                }
-                // No live key (or a key the API doesn't track separately) — fall back
-                // to the store's listed availability, which is in stock.
-                return { inStock: true, label: 'In Stock' };
+                if (count === null) count = 0;
+                return { inStock: count > 0, label: count > 0 ? ('In Stock · ' + count) : 'Out of Stock' };
             }
 
             function cardHtml(variant, stock) {
