@@ -445,6 +445,16 @@
             btn.classList.add('loading');
 
             try {
+                await buildAndDownload(key);
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+            }
+        }
+
+        // ── Build the loader for a key and download it ──
+        async function buildAndDownload(key) {
+            try {
                 let r = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
 
                 let attemptedActivation = false;
@@ -472,15 +482,14 @@
             } catch (err) {
                 toast('Error: ' + err.message, 'error');
             }
-
-            btn.disabled = false;
-            btn.classList.remove('loading');
         }
 
         // ── Warranty replacement flow ──
-        // Asks the API to check the activated account; within the warranty window
-        // an invalid account is auto-replaced and a fresh loader is rebuilt for
-        // the same key.
+        // Asks the API to check the activated account. When a replacement is
+        // issued the API returns a NEW key (`replacement_key`) — the loader is
+        // rebuilt for that new key, not the old one. If the account comes back
+        // invalid, the key may have already been replaced earlier, so we look
+        // up key_details (which now returns the replacement key) and follow it.
         async function requestReplacement() {
             const key = document.getElementById('keyInput').value.trim();
             if (!key) return toast('Please enter your key', 'error');
@@ -494,24 +503,26 @@
                 const result = (r.data && r.data.result) || '';
 
                 if (r.ok && result === 'replaced') {
-                    toast('Account replaced — rebuilding your loader…', 'success');
-                    const exe = await api('POST', '/api/v1/create_exe', { activation_key: key }, 130000);
-                    const display = { ...exe.data };
-                    if (display.exe_base64) display.exe_base64 = `[${display.exe_base64.length} chars — downloading...]`;
-                    showOutput(display, exe.ok);
-                    if (exe.ok && exe.data.exe_base64) {
-                        downloadExe(exe.data.exe_base64, exe.data.exe_filename);
-                        toast('Replacement loader downloaded', 'success');
-                    } else if (!exe.ok) {
-                        toast(exe.data.message || 'Replacement issued but loader rebuild failed', 'error');
+                    const repKey = r.data.replacement_key;
+                    if (repKey && repKey !== key) {
+                        await deliverReplacement(repKey);
+                    } else {
+                        toast('Account replaced — rebuilding your loader…', 'success');
+                        await buildAndDownload(key);
                     }
                 } else if (r.ok && result === 'valid') {
                     showOutput(r.data, true);
                     toast('Your account is still valid — no replacement needed', 'info');
                 } else {
-                    // invalid / out of warranty / no visible activity, etc.
-                    showOutput(r.data, false);
-                    toast(r.data.message || 'No replacement available for this key', 'error');
+                    // invalid / out of warranty — check whether this key was
+                    // already replaced and follow the replacement key if so.
+                    const repKey = await findReplacementKey(key);
+                    if (repKey && repKey !== key) {
+                        await deliverReplacement(repKey);
+                    } else {
+                        showOutput(r.data, false);
+                        toast(r.data.message || 'No replacement available for this key', 'error');
+                    }
                 }
             } catch (err) {
                 toast('Error: ' + err.message, 'error');
@@ -519,6 +530,26 @@
 
             btn.disabled = false;
             btn.classList.remove('loading');
+        }
+
+        // ── Look up the replacement key for an already-replaced key ──
+        async function findReplacementKey(key) {
+            try {
+                const r = await api('GET', '/api/v1/key_details?activation_key=' + encodeURIComponent(key), null, 60000);
+                const act = (r.ok && r.data && r.data.activation) || null;
+                const rep = act && (act.replacement_key || act.replaced_by || null);
+                return (typeof rep === 'string' && rep.trim()) ? rep.trim() : null;
+            } catch {
+                return null;
+            }
+        }
+
+        // ── Switch to the replacement key and rebuild the loader for it ──
+        async function deliverReplacement(newKey) {
+            document.getElementById('keyInput').value = newKey;
+            toast('Replacement issued — your new key: ' + newKey, 'success');
+            toast('Rebuilding your loader with the new key…', 'info');
+            await buildAndDownload(newKey);
         }
     </script>
 </body>
