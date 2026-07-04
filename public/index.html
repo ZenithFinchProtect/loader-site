@@ -444,10 +444,12 @@
             btn.disabled = true;
             btn.classList.add('loading');
 
-            await buildAndDownload(key);
-
-            btn.disabled = false;
-            btn.classList.remove('loading');
+            try {
+                await buildAndDownload(key);
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+            }
         }
 
         // ── Build the loader for a key and download it ──
@@ -501,7 +503,13 @@
                 const result = (r.data && r.data.result) || '';
 
                 if (r.ok && result === 'replaced') {
-                    await deliverReplacement(r.data.replacement_key || key);
+                    const repKey = r.data.replacement_key;
+                    if (repKey && repKey !== key) {
+                        await deliverReplacement(repKey);
+                    } else {
+                        toast('Account replaced — rebuilding your loader…', 'success');
+                        await buildAndDownload(key);
+                    }
                 } else if (r.ok && result === 'valid') {
                     showOutput(r.data, true);
                     toast('Your account is still valid — no replacement needed', 'info');
