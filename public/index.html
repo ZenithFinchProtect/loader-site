@@ -445,7 +445,12 @@
             btn.classList.add('loading');
 
             try {
-                await buildAndDownload(key);
+                const resolved = await resolveReplacementChain(key);
+                if (resolved !== key) {
+                    document.getElementById('keyInput').value = resolved;
+                    toast('This key was replaced — using your new key: ' + resolved, 'info');
+                }
+                await buildAndDownload(resolved);
             } finally {
                 btn.disabled = false;
                 btn.classList.remove('loading');
@@ -516,7 +521,7 @@
                 } else {
                     // invalid / out of warranty — check whether this key was
                     // already replaced and follow the replacement key if so.
-                    const repKey = await findReplacementKey(key);
+                    const repKey = await resolveReplacementChain(key);
                     if (repKey && repKey !== key) {
                         await deliverReplacement(repKey);
                     } else {
@@ -542,6 +547,17 @@
             } catch {
                 return null;
             }
+        }
+
+        // ── Follow a chain of replacements to the newest key ──
+        async function resolveReplacementChain(key) {
+            let current = key;
+            for (let i = 0; i < 5; i++) {
+                const next = await findReplacementKey(current);
+                if (!next || next === current) break;
+                current = next;
+            }
+            return current;
         }
 
         // ── Switch to the replacement key and rebuild the loader for it ──
