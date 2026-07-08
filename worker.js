@@ -63,6 +63,15 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders() });
     }
 
+    // Full pause: no NFA-bound traffic at all. Toggle with
+    // `wrangler secret put NFA_PAUSED` ("1" = paused).
+    if (env.NFA_PAUSED === '1') {
+      return new Response(JSON.stringify({ status: 'error', message: 'Temporarily unavailable: maintenance in progress' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json', 'Retry-After': '600', ...corsHeaders() },
+      });
+    }
+
     const isStockRequest = request.method === 'GET' && url.pathname === '/api/v1/stock';
     if (isStockRequest) {
       const now = Date.now();
