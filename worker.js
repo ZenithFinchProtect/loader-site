@@ -161,8 +161,11 @@ export default {
 
     const useRelay = hasRelayUrl && hasRelaySecret;
     const upstreamMode = useRelay ? 'relay' : 'direct';
+    // The relay proxies /api/v1/* verbatim (no extra prefix), authenticates
+    // with `Authorization: Bearer <RELAY_TOKEN>`, and injects the NFA key
+    // itself. See ZenithFinchProtect/nfa-relay.
     const upstream = useRelay
-      ? new URL(`/relay${url.pathname}${url.search}`, env.NFA_RELAY_URL)
+      ? new URL(url.pathname + url.search, env.NFA_RELAY_URL)
       : new URL(url.pathname + url.search, NFA_ORIGIN);
 
     if (!useRelay && !env.NFA_API_KEY) {
@@ -177,7 +180,7 @@ export default {
 
     const headers = new Headers();
     if (useRelay) {
-      headers.set('X-Relay-Secret', env.NFA_RELAY_SECRET);
+      headers.set('Authorization', `Bearer ${env.NFA_RELAY_SECRET}`);
     } else {
       headers.set('X-API-Key', env.NFA_API_KEY);
     }
