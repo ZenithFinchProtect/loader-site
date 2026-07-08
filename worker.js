@@ -47,6 +47,24 @@ export default {
       });
     }
 
+    // The proxy attaches the secret NFA key, so only the endpoints the loader
+    // and stock pages actually use may pass through; anything else would make
+    // this an open relay that outsiders can hammer (looking like us spamming
+    // the NFA API).
+    const ALLOWED_PROXY_PATHS = new Set([
+      '/api/v1/stock',
+      '/api/v1/activate',
+      '/api/v1/create_exe',
+      '/api/v1/check_account',
+      '/api/v1/key_details',
+    ]);
+    if (!ALLOWED_PROXY_PATHS.has(url.pathname)) {
+      return new Response(JSON.stringify({ status: 'error', message: 'Not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+      });
+    }
+
     // --- Build upstream request ---
     const upstream = new URL(url.pathname + url.search, NFA_ORIGIN);
 
