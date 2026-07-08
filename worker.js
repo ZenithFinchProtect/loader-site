@@ -139,9 +139,15 @@ export default {
     }
 
     // --- Build upstream request ---
-    const upstream = new URL(url.pathname + url.search, NFA_ORIGIN);
+    // When the relay is configured (NFA_RELAY_URL + NFA_RELAY_SECRET secrets),
+    // NFA calls go through it: NFA blocks Cloudflare egress IPs, so the relay
+    // (on Railway) forwards them from an unblocked IP and holds the NFA key.
+    const useRelay = env.NFA_RELAY_URL && env.NFA_RELAY_SECRET;
+    const upstream = useRelay
+      ? new URL(`/relay${url.pathname}${url.search}`, env.NFA_RELAY_URL)
+      : new URL(url.pathname + url.search, NFA_ORIGIN);
 
-    if (!env.NFA_API_KEY) {
+    if (!useRelay && !env.NFA_API_KEY) {
       return new Response(JSON.stringify({
           status: 'error',
           message: 'Server configuration error: NFA_API_KEY is not set in Cloudflare'
@@ -152,7 +158,11 @@ export default {
     }
 
     const headers = new Headers();
-    headers.set('X-API-Key', env.NFA_API_KEY);
+    if (useRelay) {
+      headers.set('X-Relay-Secret', env.NFA_RELAY_SECRET);
+    } else {
+      headers.set('X-API-Key', env.NFA_API_KEY);
+    }
     headers.set('Content-Type', 'application/json');
     headers.set('Accept', 'application/json');
 
