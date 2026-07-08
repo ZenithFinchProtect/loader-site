@@ -8,6 +8,9 @@ const NFA_ORIGIN = 'https://nfa-api.acode.ing';
 // the NFA API only sees an occasional request from us.
 const STOCK_CACHE_TTL_SECONDS = 5;
 let _stockCache = { time: 0, body: null };
+// Last time we attempted an upstream stock fetch (successful or not), so
+// spamming the endpoint can't multiply calls to NFA even while it's erroring.
+let _stockLastAttempt = 0;
 
 function corsHeaders() {
   return {
@@ -57,11 +60,27 @@ export default {
     }
 
     const isStockRequest = request.method === 'GET' && url.pathname === '/api/v1/stock';
-    if (isStockRequest && _stockCache.body && Date.now() - _stockCache.time < STOCK_CACHE_TTL_SECONDS * 1000) {
-      return new Response(_stockCache.body, {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'hit', ...corsHeaders() },
-      });
+    if (isStockRequest) {
+      const now = Date.now();
+      if (_stockCache.body && now - _stockCache.time < STOCK_CACHE_TTL_SECONDS * 1000) {
+        return new Response(_stockCache.body, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'hit', ...corsHeaders() },
+        });
+      }
+      if (now - _stockLastAttempt < STOCK_CACHE_TTL_SECONDS * 1000) {
+        if (_stockCache.body) {
+          return new Response(_stockCache.body, {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'stale', ...corsHeaders() },
+          });
+        }
+        return new Response(JSON.stringify({ status: 'error', message: 'Stock temporarily unavailable — try again shortly' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', 'Retry-After': String(STOCK_CACHE_TTL_SECONDS), ...corsHeaders() },
+        });
+      }
+      _stockLastAttempt = now;
     }
 
     // The proxy attaches the secret NFA key, so only the endpoints the loader
@@ -113,17 +132,22 @@ export default {
     try {
       const response = await fetch(upstream.toString(), init);
 
-      if (isStockRequest && response.ok) {
+      if (isStockRequest) {
         const body = await response.text();
         let ok = false;
         try {
-          ok = JSON.parse(body).status === 'success';
+          ok = response.ok && JSON.parse(body).status === 'success';
         } catch {
           ok = false;
         }
         if (ok) {
           _stockCache = { time: Date.now(), body };
-        } else if (_stockCache.body) {
+          return new Response(body, {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'miss', ...corsHeaders() },
+          });
+        }
+        if (_stockCache.body) {
           // Upstream errored (e.g. rate limited): keep serving the last good data.
           return new Response(_stockCache.body, {
             status: 200,
@@ -131,8 +155,8 @@ export default {
           });
         }
         return new Response(body, {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'miss', ...corsHeaders() },
+          status: response.ok ? 200 : response.status,
+          headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'error', ...corsHeaders() },
         });
       }
 
