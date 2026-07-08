@@ -21,8 +21,12 @@ function corsHeaders() {
   };
 }
 
+// Colo-wide cache key for stock (isolate cache is per-isolate only, so bursts
+// spread across isolates need a shared layer too).
+const STOCK_EDGE_CACHE_URL = 'https://stock-cache.internal/api/v1/stock';
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     // Per-IP rate limit on API paths so they can't be spammed into tripping
@@ -80,6 +84,28 @@ export default {
           headers: { 'Content-Type': 'application/json', 'Retry-After': String(STOCK_CACHE_TTL_SECONDS), ...corsHeaders() },
         });
       }
+
+      // Colo-shared cache layer (covers bursts spread across isolates).
+      try {
+        const edgeHit = await caches.default.match(STOCK_EDGE_CACHE_URL);
+        if (edgeHit) {
+          const body = await edgeHit.text();
+          if (edgeHit.headers.get('X-Stock-Ok') === '1') {
+            _stockCache = { time: now, body };
+            return new Response(body, {
+              status: 200,
+              headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'edge', ...corsHeaders() },
+            });
+          }
+          return new Response(JSON.stringify({ status: 'error', message: 'Stock temporarily unavailable — try again shortly' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json', 'Retry-After': String(STOCK_CACHE_TTL_SECONDS), ...corsHeaders() },
+          });
+        }
+      } catch {
+        // Cache API unavailable — fall through to upstream.
+      }
+
       _stockLastAttempt = now;
     }
 
@@ -139,6 +165,18 @@ export default {
           ok = response.ok && JSON.parse(body).status === 'success';
         } catch {
           ok = false;
+        }
+        try {
+          const cachePut = caches.default.put(STOCK_EDGE_CACHE_URL, new Response(body, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': `s-maxage=${STOCK_CACHE_TTL_SECONDS}`,
+              'X-Stock-Ok': ok ? '1' : '0',
+            },
+          }));
+          if (ctx) ctx.waitUntil(cachePut); else await cachePut;
+        } catch {
+          // Cache API unavailable — isolate cache still applies.
         }
         if (ok) {
           _stockCache = { time: Date.now(), body };
