@@ -22,6 +22,23 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // Per-IP rate limit on API paths so they can't be spammed into tripping
+    // NFA's rate limit (static assets are exempt).
+    if (url.pathname.startsWith('/api/') && env.RATE_LIMITER) {
+      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+      try {
+        const { success } = await env.RATE_LIMITER.limit({ key: ip });
+        if (!success) {
+          return new Response(JSON.stringify({ status: 'error', message: 'Too many requests — slow down' }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json', 'Retry-After': '10', ...corsHeaders() },
+          });
+        }
+      } catch {
+        // Rate limiter unavailable — fail open.
+      }
+    }
+
     // --- Serve static assets ---
     if (!url.pathname.startsWith('/api/')) {
       // Stock page: served on the `stock.` subdomain root, or via /stock.
