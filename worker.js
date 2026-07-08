@@ -4,9 +4,9 @@
 
 const NFA_ORIGIN = 'https://nfa-api.acode.ing';
 
-// Stock responses are cached briefly so visitors are served cached data and
-// the NFA API only sees an occasional request from us.
-const STOCK_CACHE_TTL_SECONDS = 5;
+// Stock responses are cached so visitors are served cached data and the NFA
+// API sees at most about one stock read per minute from us.
+const STOCK_CACHE_TTL_SECONDS = 60;
 let _stockCache = { time: 0, body: null };
 // Last time we attempted an upstream stock fetch (successful or not), so
 // spamming the endpoint can't multiply calls to NFA even while it's erroring.
