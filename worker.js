@@ -5,8 +5,8 @@
 const NFA_ORIGIN = 'https://nfa-api.acode.ing';
 
 // Stock responses are cached so visitors are served cached data and the NFA
-// API sees at most about one stock read per minute from us.
-const STOCK_CACHE_TTL_SECONDS = 60;
+// API sees at most about one stock read every two minutes from us.
+const STOCK_CACHE_TTL_SECONDS = 120;
 let _stockCache = { time: 0, body: null };
 // Last time we attempted an upstream stock fetch (successful or not), so
 // spamming the endpoint can't multiply calls to NFA even while it's erroring.
@@ -17,6 +17,7 @@ function corsHeaders() {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Expose-Headers': 'X-Stock-Updated, X-Stock-Cache',
     'Access-Control-Max-Age': '86400',
   };
 }
@@ -78,14 +79,14 @@ export default {
       if (_stockCache.body && now - _stockCache.time < STOCK_CACHE_TTL_SECONDS * 1000) {
         return new Response(_stockCache.body, {
           status: 200,
-          headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'hit', ...corsHeaders() },
+          headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'hit', 'X-Stock-Updated': String(_stockCache.time), ...corsHeaders() },
         });
       }
       if (now - _stockLastAttempt < STOCK_CACHE_TTL_SECONDS * 1000) {
         if (_stockCache.body) {
           return new Response(_stockCache.body, {
             status: 200,
-            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'stale', ...corsHeaders() },
+            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'stale', 'X-Stock-Updated': String(_stockCache.time), ...corsHeaders() },
           });
         }
         return new Response(JSON.stringify({ status: 'error', message: 'Stock temporarily unavailable — try again shortly' }), {
@@ -100,10 +101,11 @@ export default {
         if (edgeHit) {
           const body = await edgeHit.text();
           if (edgeHit.headers.get('X-Stock-Ok') === '1') {
-            _stockCache = { time: now, body };
+            const cachedAt = Number(edgeHit.headers.get('X-Stock-Time')) || now;
+            _stockCache = { time: cachedAt, body };
             return new Response(body, {
               status: 200,
-              headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'edge', ...corsHeaders() },
+              headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'edge', 'X-Stock-Updated': String(cachedAt), ...corsHeaders() },
             });
           }
           return new Response(JSON.stringify({ status: 'error', message: 'Stock temporarily unavailable — try again shortly' }), {
@@ -181,6 +183,7 @@ export default {
               'Content-Type': 'application/json',
               'Cache-Control': `s-maxage=${STOCK_CACHE_TTL_SECONDS}`,
               'X-Stock-Ok': ok ? '1' : '0',
+              'X-Stock-Time': String(Date.now()),
             },
           }));
           if (ctx) ctx.waitUntil(cachePut); else await cachePut;
@@ -191,14 +194,14 @@ export default {
           _stockCache = { time: Date.now(), body };
           return new Response(body, {
             status: 200,
-            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'miss', ...corsHeaders() },
+            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'miss', 'X-Stock-Updated': String(_stockCache.time), ...corsHeaders() },
           });
         }
         if (_stockCache.body) {
           // Upstream errored (e.g. rate limited): keep serving the last good data.
           return new Response(_stockCache.body, {
             status: 200,
-            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'stale', ...corsHeaders() },
+            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'stale', 'X-Stock-Updated': String(_stockCache.time), ...corsHeaders() },
           });
         }
         return new Response(body, {

@@ -400,7 +400,7 @@
                     + '</div>';
             }
 
-            function render(stock) {
+            function render(stock, cachedAt) {
                 var html = CATALOG.map(function (group) {
                     var inCount = group.variants.filter(function (v) {
                         return statusFor(v, stock).inStock;
@@ -420,17 +420,22 @@
                 root.innerHTML = html || '<div class="state">No stock to display.</div>';
 
                 var u = document.getElementById('updated');
-                if (u) u.textContent = 'Updated ' + new Date().toLocaleTimeString();
+                if (u && cachedAt) u.textContent = 'Updated ' + new Date(cachedAt).toLocaleTimeString();
+                else if (u) u.textContent = '';
             }
 
             function load() {
                 fetch(API, { headers: { 'Accept': 'application/json' } })
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) { render((data && data.stock) || {}); })
+                    .then(function (r) {
+                        var cachedAt = Number(r.headers.get('X-Stock-Updated')) || 0;
+                        return r.json().then(function (data) {
+                            render((data && data.stock) || {}, cachedAt);
+                        });
+                    })
                     .catch(function () {
                         // Network/API failure — still show the full catalog using
                         // the store's listed availability so the page is never blank.
-                        render({});
+                        render({}, 0);
                     });
             }
 
