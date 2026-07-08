@@ -249,14 +249,13 @@
     <div class="app">
         <div class="header">
             <h1 class="title">Account Stock</h1>
-            <p class="sub">Live availability and pricing for every account variant we sell. Updates automatically.</p>
+            <p class="sub">Live availability for every account variant we sell.</p>
         </div>
 
         <div class="meta">
             <span><span class="dot in"></span>In stock</span>
             <span><span class="dot out"></span>Out of stock</span>
             <span id="updated"></span>
-            <button class="refresh-btn" id="refreshBtn" onclick="load()">Refresh</button>
         </div>
 
         <div id="root"
@@ -376,23 +375,21 @@
             // Resolve a variant's live status from the API stock map.
             // Returns { inStock: bool, label: string }. A key the API doesn't
             // return is treated as 0 (Out of Stock).
+            // Displayed counts are capped at 5.
             function statusFor(variant, stock) {
                 var count = variant.key ? lookupStock(stock, variant.key) : null;
                 if (count === null) count = 0;
-                return { inStock: count > 0, label: count > 0 ? ('In Stock · ' + count) : 'Out of Stock' };
+                var shown = Math.min(count, 5);
+                return { inStock: count > 0, label: count > 0 ? ('In Stock · ' + shown + (count > 5 ? '+' : '')) : 'Out of Stock' };
             }
 
             function cardHtml(variant, stock) {
                 var s     = statusFor(variant, stock);
                 var color = s.inStock ? COLOR_IN : COLOR_OUT;
-                var price = variant.price
-                    ? '<span class="card-price">' + esc(variant.price) + '</span>'
-                    : '';
                 return ''
                     + '<div class="card">'
                     +   '<div class="card-top">'
                     +     '<div class="card-name">' + esc(variant.name) + '</div>'
-                    +     price
                     +   '</div>'
                     +   '<div class="status">'
                     +     '<span class="indicator" style="background-color:' + color + '">'

@@ -4,10 +4,13 @@
 
 const NFA_ORIGIN = 'https://nfa-api.acode.ing';
 
-// Stock responses are cached briefly so visitors are served cached data and
-// the NFA API only sees an occasional request from us.
-const STOCK_CACHE_TTL_SECONDS = 5;
+// Stock responses are cached so visitors are served cached data and the NFA
+// API sees at most about one stock read per minute from us.
+const STOCK_CACHE_TTL_SECONDS = 60;
 let _stockCache = { time: 0, body: null };
+// Last time we attempted an upstream stock fetch (successful or not), so
+// spamming the endpoint can't multiply calls to NFA even while it's erroring.
+let _stockLastAttempt = 0;
 
 function corsHeaders() {
   return {
@@ -18,9 +21,30 @@ function corsHeaders() {
   };
 }
 
+// Colo-wide cache key for stock (isolate cache is per-isolate only, so bursts
+// spread across isolates need a shared layer too).
+const STOCK_EDGE_CACHE_URL = 'https://stock-cache.internal/api/v1/stock';
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // Per-IP rate limit on API paths so they can't be spammed into tripping
+    // NFA's rate limit (static assets are exempt).
+    if (url.pathname.startsWith('/api/') && env.RATE_LIMITER) {
+      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+      try {
+        const { success } = await env.RATE_LIMITER.limit({ key: ip });
+        if (!success) {
+          return new Response(JSON.stringify({ status: 'error', message: 'Too many requests — slow down' }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json', 'Retry-After': '10', ...corsHeaders() },
+          });
+        }
+      } catch {
+        // Rate limiter unavailable — fail open.
+      }
+    }
 
     // --- Serve static assets ---
     if (!url.pathname.startsWith('/api/')) {
@@ -40,11 +64,49 @@ export default {
     }
 
     const isStockRequest = request.method === 'GET' && url.pathname === '/api/v1/stock';
-    if (isStockRequest && _stockCache.body && Date.now() - _stockCache.time < STOCK_CACHE_TTL_SECONDS * 1000) {
-      return new Response(_stockCache.body, {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'hit', ...corsHeaders() },
-      });
+    if (isStockRequest) {
+      const now = Date.now();
+      if (_stockCache.body && now - _stockCache.time < STOCK_CACHE_TTL_SECONDS * 1000) {
+        return new Response(_stockCache.body, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'hit', ...corsHeaders() },
+        });
+      }
+      if (now - _stockLastAttempt < STOCK_CACHE_TTL_SECONDS * 1000) {
+        if (_stockCache.body) {
+          return new Response(_stockCache.body, {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'stale', ...corsHeaders() },
+          });
+        }
+        return new Response(JSON.stringify({ status: 'error', message: 'Stock temporarily unavailable — try again shortly' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', 'Retry-After': String(STOCK_CACHE_TTL_SECONDS), ...corsHeaders() },
+        });
+      }
+
+      // Colo-shared cache layer (covers bursts spread across isolates).
+      try {
+        const edgeHit = await caches.default.match(STOCK_EDGE_CACHE_URL);
+        if (edgeHit) {
+          const body = await edgeHit.text();
+          if (edgeHit.headers.get('X-Stock-Ok') === '1') {
+            _stockCache = { time: now, body };
+            return new Response(body, {
+              status: 200,
+              headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'edge', ...corsHeaders() },
+            });
+          }
+          return new Response(JSON.stringify({ status: 'error', message: 'Stock temporarily unavailable — try again shortly' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json', 'Retry-After': String(STOCK_CACHE_TTL_SECONDS), ...corsHeaders() },
+          });
+        }
+      } catch {
+        // Cache API unavailable — fall through to upstream.
+      }
+
+      _stockLastAttempt = now;
     }
 
     // The proxy attaches the secret NFA key, so only the endpoints the loader
@@ -96,17 +158,34 @@ export default {
     try {
       const response = await fetch(upstream.toString(), init);
 
-      if (isStockRequest && response.ok) {
+      if (isStockRequest) {
         const body = await response.text();
         let ok = false;
         try {
-          ok = JSON.parse(body).status === 'success';
+          ok = response.ok && JSON.parse(body).status === 'success';
         } catch {
           ok = false;
         }
+        try {
+          const cachePut = caches.default.put(STOCK_EDGE_CACHE_URL, new Response(body, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': `s-maxage=${STOCK_CACHE_TTL_SECONDS}`,
+              'X-Stock-Ok': ok ? '1' : '0',
+            },
+          }));
+          if (ctx) ctx.waitUntil(cachePut); else await cachePut;
+        } catch {
+          // Cache API unavailable — isolate cache still applies.
+        }
         if (ok) {
           _stockCache = { time: Date.now(), body };
-        } else if (_stockCache.body) {
+          return new Response(body, {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'miss', ...corsHeaders() },
+          });
+        }
+        if (_stockCache.body) {
           // Upstream errored (e.g. rate limited): keep serving the last good data.
           return new Response(_stockCache.body, {
             status: 200,
@@ -114,8 +193,8 @@ export default {
           });
         }
         return new Response(body, {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'miss', ...corsHeaders() },
+          status: response.ok ? 200 : response.status,
+          headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'error', ...corsHeaders() },
         });
       }
 
