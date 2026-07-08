@@ -7,6 +7,12 @@ const NFA_ORIGIN = 'https://nfa-api.acode.ing';
 // Stock responses are cached so visitors are served cached data and the NFA
 // API sees at most about one stock read every two minutes from us.
 const STOCK_CACHE_TTL_SECONDS = 120;
+
+// Loader downloads are limited to one per IP every 2 minutes (KV-backed so it
+// holds across isolates). The cooldown starts only after a successful EXE
+// build, so the activate → create_exe flow for fresh keys and failed attempts
+// aren't penalized.
+const DOWNLOAD_COOLDOWN_SECONDS = 120;
 let _stockCache = { time: 0, body: null };
 // Last time we attempted an upstream stock fetch (successful or not), so
 // spamming the endpoint can't multiply calls to NFA even while it's erroring.
@@ -138,6 +144,24 @@ export default {
       });
     }
 
+    const isDownloadRequest = request.method === 'POST' && url.pathname === '/api/v1/create_exe';
+    const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+    if (isDownloadRequest && env.DOWNLOAD_COOLDOWN) {
+      try {
+        const last = Number(await env.DOWNLOAD_COOLDOWN.get(`dl:${clientIp}`)) || 0;
+        const elapsed = Date.now() - last;
+        if (last && elapsed < DOWNLOAD_COOLDOWN_SECONDS * 1000) {
+          const waitSec = Math.ceil((DOWNLOAD_COOLDOWN_SECONDS * 1000 - elapsed) / 1000);
+          return new Response(JSON.stringify({ status: 'error', message: `Download cooldown — try again in ${waitSec}s` }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json', 'Retry-After': String(waitSec), ...corsHeaders() },
+          });
+        }
+      } catch {
+        // KV unavailable — fail open.
+      }
+    }
+
     // --- Build upstream request ---
     // When the relay is configured (NFA_RELAY_URL + NFA_RELAY_SECRET secrets),
     // NFA calls go through it: NFA blocks Cloudflare egress IPs, so the relay
@@ -249,6 +273,29 @@ export default {
         responseHeaders.set(k, v);
       }
       responseHeaders.set('X-Upstream-Mode', upstreamMode);
+
+      if (isDownloadRequest && env.DOWNLOAD_COOLDOWN) {
+        const body = await response.text();
+        let built = false;
+        try {
+          built = response.ok && Boolean(JSON.parse(body).exe_base64);
+        } catch {
+          built = false;
+        }
+        if (built) {
+          try {
+            const put = env.DOWNLOAD_COOLDOWN.put(`dl:${clientIp}`, String(Date.now()), { expirationTtl: DOWNLOAD_COOLDOWN_SECONDS });
+            if (ctx) ctx.waitUntil(put); else await put;
+          } catch {
+            // KV unavailable — skip recording the cooldown.
+          }
+        }
+        return new Response(body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders,
+        });
+      }
 
       return new Response(response.body, {
         status: response.status,

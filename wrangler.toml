@@ -7,6 +7,11 @@ directory = "./public"
 binding = "ASSETS"
 run_worker_first = true
 
+# Per-IP loader-download cooldown state (see DOWNLOAD_COOLDOWN_SECONDS in worker.js).
+[[kv_namespaces]]
+binding = "DOWNLOAD_COOLDOWN"
+id = "d848694be8c7495183b64b8f7cbd3f1f"
+
 # Per-IP rate limiter for /api/ paths (Workers Rate Limiting API).
 [[unsafe.bindings]]
 name = "RATE_LIMITER"
