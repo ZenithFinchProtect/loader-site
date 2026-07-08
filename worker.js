@@ -17,7 +17,7 @@ function corsHeaders() {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Expose-Headers': 'X-Stock-Updated, X-Stock-Cache',
+    'Access-Control-Expose-Headers': 'X-Stock-Updated, X-Stock-Cache, X-Upstream-Mode',
     'Access-Control-Max-Age': '86400',
   };
 }
@@ -142,9 +142,30 @@ export default {
     // When the relay is configured (NFA_RELAY_URL + NFA_RELAY_SECRET secrets),
     // NFA calls go through it: NFA blocks Cloudflare egress IPs, so the relay
     // (on Railway) forwards them from an unblocked IP and holds the NFA key.
-    const useRelay = env.NFA_RELAY_URL && env.NFA_RELAY_SECRET;
+    // The relay must be fully configured or not at all. If only one of the two
+    // secrets is present we fail loudly here instead of silently falling back
+    // to the direct NFA path — whose Cloudflare egress IP is blocked, so a
+    // half-configured relay looks exactly like a working site that is simply
+    // "out of stock". Failing loudly makes the misconfiguration obvious.
+    const hasRelayUrl = Boolean(env.NFA_RELAY_URL);
+    const hasRelaySecret = Boolean(env.NFA_RELAY_SECRET);
+    if (hasRelayUrl !== hasRelaySecret) {
+      return new Response(JSON.stringify({
+          status: 'error',
+          message: 'Server configuration error: relay is half-configured — set BOTH NFA_RELAY_URL and NFA_RELAY_SECRET (or neither)'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'X-Upstream-Mode': 'misconfigured', ...corsHeaders() },
+      });
+    }
+
+    const useRelay = hasRelayUrl && hasRelaySecret;
+    const upstreamMode = useRelay ? 'relay' : 'direct';
+    // The relay proxies /api/v1/* verbatim (no extra prefix), authenticates
+    // with `Authorization: Bearer <RELAY_TOKEN>`, and injects the NFA key
+    // itself. See ZenithFinchProtect/nfa-relay.
     const upstream = useRelay
-      ? new URL(`/relay${url.pathname}${url.search}`, env.NFA_RELAY_URL)
+      ? new URL(url.pathname + url.search, env.NFA_RELAY_URL)
       : new URL(url.pathname + url.search, NFA_ORIGIN);
 
     if (!useRelay && !env.NFA_API_KEY) {
@@ -153,13 +174,13 @@ export default {
           message: 'Server configuration error: NFA_API_KEY is not set in Cloudflare'
       }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+        headers: { 'Content-Type': 'application/json', 'X-Upstream-Mode': upstreamMode, ...corsHeaders() },
       });
     }
 
     const headers = new Headers();
     if (useRelay) {
-      headers.set('X-Relay-Secret', env.NFA_RELAY_SECRET);
+      headers.set('Authorization', `Bearer ${env.NFA_RELAY_SECRET}`);
     } else {
       headers.set('X-API-Key', env.NFA_API_KEY);
     }
@@ -204,19 +225,19 @@ export default {
           _stockCache = { time: Date.now(), body };
           return new Response(body, {
             status: 200,
-            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'miss', 'X-Stock-Updated': String(_stockCache.time), ...corsHeaders() },
+            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'miss', 'X-Stock-Updated': String(_stockCache.time), 'X-Upstream-Mode': upstreamMode, ...corsHeaders() },
           });
         }
         if (_stockCache.body) {
           // Upstream errored (e.g. rate limited): keep serving the last good data.
           return new Response(_stockCache.body, {
             status: 200,
-            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'stale', 'X-Stock-Updated': String(_stockCache.time), ...corsHeaders() },
+            headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'stale', 'X-Stock-Updated': String(_stockCache.time), 'X-Upstream-Mode': upstreamMode, ...corsHeaders() },
           });
         }
         return new Response(body, {
           status: response.ok ? 200 : response.status,
-          headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'error', ...corsHeaders() },
+          headers: { 'Content-Type': 'application/json', 'X-Stock-Cache': 'error', 'X-Upstream-Mode': upstreamMode, ...corsHeaders() },
         });
       }
 
@@ -227,6 +248,7 @@ export default {
       for (const [k, v] of Object.entries(cors)) {
         responseHeaders.set(k, v);
       }
+      responseHeaders.set('X-Upstream-Mode', upstreamMode);
 
       return new Response(response.body, {
         status: response.status,
