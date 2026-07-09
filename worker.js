@@ -162,6 +162,32 @@ export default {
       }
     }
 
+    // Only requests that will actually reach the NFA API get here (cached
+    // stock is served above). Enforce a strict per-IP cap and a global cap so
+    // spam can't trip the NFA API's own rate limit against our key.
+    try {
+      if (env.NFA_IP_LIMITER) {
+        const { success } = await env.NFA_IP_LIMITER.limit({ key: clientIp });
+        if (!success) {
+          return new Response(JSON.stringify({ status: 'error', message: 'Too many requests — slow down' }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json', 'Retry-After': '60', ...corsHeaders() },
+          });
+        }
+      }
+      if (env.NFA_GLOBAL_LIMITER) {
+        const { success } = await env.NFA_GLOBAL_LIMITER.limit({ key: 'global' });
+        if (!success) {
+          return new Response(JSON.stringify({ status: 'error', message: 'Service is busy — try again in a minute' }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/json', 'Retry-After': '60', ...corsHeaders() },
+          });
+        }
+      }
+    } catch {
+      // Rate limiter unavailable — fail open.
+    }
+
     // --- Build upstream request ---
     // When the relay is configured (NFA_RELAY_URL + NFA_RELAY_SECRET secrets),
     // NFA calls go through it: NFA blocks Cloudflare egress IPs, so the relay
